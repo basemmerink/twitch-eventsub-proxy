@@ -1,5 +1,6 @@
 import {OAuthModule} from './OAuthModule';
 import {Subject, Subscription} from 'rxjs';
+import open = require('open');
 
 class TwitchSubscription {
     public id: string;
@@ -7,7 +8,6 @@ class TwitchSubscription {
     public type: string;
     public version: string;
     public condition: any;
-    // tslint:disable-next-line:variable-name
     public created_at: string;
     public transport: any;
     public cost: number;
@@ -52,81 +52,83 @@ class TwitchModule extends OAuthModule
         });
     }
 
-    onTokensLoaded(): void
+    onTokensLoaded(hasAccessToken: boolean): void
     {
-        this.listSubscriptions();
+        if (hasAccessToken)
+        {
+            this.initSubscriptions();
+        }
+        else
+        {
+            const scope = ['bits:read', 'channel:read:redemptions', 'channel:read:subscriptions'];
+            open(`https://id.twitch.tv/oauth2/authorize?client_id=${process.env.TWITCH_CLIENT_ID}&redirect_uri=https://${process.env.PUBLIC_DOMAIN_OR_IP}/twitch&scope=${scope.join('%20')}&force_verify=true&response_type=code`);
+        }
     }
 
-    public createSubscription(type: string, condition: any): void
+    onAccessToken()
     {
-        this.getHeaders()
-            .then(headers =>
-            {
-                this.doPost('/eventsub/subscriptions', headers, undefined, {
-                    type,
-                    version: '1',
-                    condition,
-                    transport: {
-                        method: 'webhook',
-                        callback: `https://${process.env.PUBLIC_DOMAIN_OR_IP}/eventsub`,
-                        secret: process.env.TWITCH_WEBHOOK_SECRET
+        this.initSubscriptions();
+    }
+
+    private initSubscriptions(): void
+    {
+        this.getHeaders('authorization_code').then(headers => {
+            this.doGet('/users', headers, new Map([['login', process.env.TWITCH_CHANNEL]]))
+                .then(result => {
+                    if (!result.data || result.data.length === 0)
+                    {
+                        console.log(`User ${process.env.TWITCH_CHANNEL} does not exist on Twitch, or there was an API error`);
+                        process.exit(-1);
                     }
-                })
-                    .then(result => {
-                        if (!this.subscriptionEvents.has(type))
-                        {
-                            this.subscriptionEvents.set(type, new Subject());
-                        }
-                        console.log('Subscription create result', result);
-                    })
-                    .catch(err => console.log('Subscription create error', err));
-            })
-            .catch(err => console.log('Error in trying to get headers', err));
+                    else
+                    {
+                        this.broadcasterId = result.data[0].id;
+                        this.listSubscriptions();
+                    }
+                });
+        })
     }
 
     private listSubscriptions(): void
     {
-        this.getHeaders().then(headers =>
-        {
-            this.doGet('/eventsub/subscriptions', headers)
-                .then(result =>
-                {
-                    result.data.forEach((subscription: TwitchSubscription) => {
-                        console.log('Subscription initialized', subscription.type, subscription.status);
-                        switch (subscription.status) {
-                            case 'webhook_callback_verification_failed':
-                            case 'notification_failures_exceeded':
-                                this.deleteSubscription(subscription.id);
-                                break;
-                            case 'enabled':
-                                this.subscriptions.set(subscription.type, subscription);
-                                if (!this.subscriptionEvents.has(subscription.type))
-                                {
-                                    this.subscriptionEvents.set(subscription.type, new Subject());
-                                }
-                                break;
-                            default:
-                                break;
-                        }
-                    });
-                    this.onSubscriptionsInitialized();
-                })
-                .catch(err => console.log('list subs error: ' + err));
-        });
+        this.doGet('/eventsub/subscriptions')
+            .then(result =>
+            {
+                result.data.forEach((subscription: TwitchSubscription) => {
+                    console.log('Subscription initialized', subscription.type, subscription.status);
+                    switch (subscription.status) {
+                        case 'webhook_callback_verification_failed':
+                        case 'notification_failures_exceeded':
+                            this.deleteSubscription(subscription.id);
+                            break;
+                        case 'enabled':
+                            this.subscriptions.set(subscription.type, subscription);
+                            if (!this.subscriptionEvents.has(subscription.type))
+                            {
+                                this.subscriptionEvents.set(subscription.type, new Subject());
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                });
+                this.onSubscriptionsInitialized();
+            })
+            .catch(err => console.log('list eventsub error: ' + err));
     }
 
     private onSubscriptionsInitialized()
     {
-        this.createSubscriptionIfNotExist('channel.update', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('channel.follow', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('channel.subscribe', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('channel.subscription.gift', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('channel.subscription.message', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('channel.cheer', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('channel.raid', { to_broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('channel.channel_points_custom_reward_redemption.add', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('stream.online', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
-        this.createSubscriptionIfNotExist('stream.offline', { broadcaster_user_id: process.env.TWITCH_BROADCASTER_ID });
+        this.createSubscriptionIfNotExist('channel.update', { broadcaster_user_id: this.broadcasterId });
+        this.createSubscriptionIfNotExist('channel.follow', { broadcaster_user_id: this.broadcasterId });
+        this.createSubscriptionIfNotExist('channel.subscribe', { broadcaster_user_id: this.broadcasterId }); // channel:read:subscriptions
+        this.createSubscriptionIfNotExist('channel.subscription.gift', { broadcaster_user_id: this.broadcasterId }); // channel:read:subscriptions
+        this.createSubscriptionIfNotExist('channel.subscription.message', { broadcaster_user_id: this.broadcasterId }); // channel:read:subscriptions
+        this.createSubscriptionIfNotExist('channel.cheer', { broadcaster_user_id: this.broadcasterId }); // bits:read
+        this.createSubscriptionIfNotExist('channel.raid', { to_broadcaster_user_id: this.broadcasterId });
+        this.createSubscriptionIfNotExist('channel.channel_points_custom_reward_redemption.add', { broadcaster_user_id: this.broadcasterId }); // channel:read:redemptions
+        this.createSubscriptionIfNotExist('stream.online', { broadcaster_user_id: this.broadcasterId });
+        this.createSubscriptionIfNotExist('stream.offline', { broadcaster_user_id: this.broadcasterId });
     }
 
     private createSubscriptionIfNotExist(type: string, condition: any)
@@ -138,17 +140,34 @@ class TwitchModule extends OAuthModule
     }
 
     private deleteSubscription(id: string) {
-        this.getHeaders().then(headers =>
-        {
-            this.doDelete('/eventsub/subscriptions', headers, new Map([
-                ['id', id]
-            ]))
-                .then(result =>
+        this.doDelete('/eventsub/subscriptions', undefined, new Map([['id', id]]))
+            .then(result =>
+            {
+                console.log(`Subscription ${id} deleted`);
+            })
+            .catch(err => console.log('Error deleting eventsub subscription', err));
+    }
+
+    public createSubscription(type: string, condition: any): void
+    {
+        this.doPost('/eventsub/subscriptions', undefined, undefined, {
+            type,
+            version: '1',
+            condition,
+            transport: {
+                method: 'webhook',
+                callback: `${process.env.PUBLIC_DOMAIN_OR_IP}/eventsub`,
+                secret: process.env.TWITCH_WEBHOOK_SECRET
+            }
+        })
+            .then(result => {
+                if (!this.subscriptionEvents.has(type))
                 {
-                    console.log(`Subscription ${id} deleted`);
-                })
-                .catch(err => console.log('Error deleting subscription', err));
-        });
+                    this.subscriptionEvents.set(type, new Subject());
+                }
+                console.log('Subscription create result', result);
+            })
+            .catch(err => console.log('Eventsub subscription create error', err));
     }
 
     public subscribeTwitchEvent(type: string, callback: (event) => void): Subscription

@@ -103,6 +103,15 @@ app.post('/eventsub', (req, res) => {
     }
 });
 
+app.all('/twitch', (req, res, next) =>
+{
+    if (req.query.code)
+    {
+        twitchModule.setCode(req.query.code);
+        res.sendStatus(200);
+    }
+});
+
 function getHmacMessage(request) {
     return (request.headers[TWITCH_MESSAGE_ID] +
         request.headers[TWITCH_MESSAGE_TIMESTAMP] +

@@ -38,17 +38,21 @@ export abstract class OAuthModule extends RestAPIModule
         {
             this.accessTokens = new Map(data);
             console.log('tokens loaded for ' + oauthOptions.endpoint.host);
-            this.onTokensLoaded();
+            this.onTokensLoaded(this.accessTokens.has('authorization_code'));
         }, []);
     }
 
-    abstract onTokensLoaded(): void;
+    abstract onTokensLoaded(hasAccessToken: boolean): void;
+    abstract onAccessToken(): void;
 
     public setCode(code: string)
     {
         this.code = code;
         this.getAccessToken()
-            .then(token => 'Client token registered for ' + this.oauthOptions.endpoint.host)
+            .then(token => {
+                console.log('Access token registered for ' + this.oauthOptions.endpoint.host);
+                this.onAccessToken();
+            })
             .catch(console.log);
     }
 
@@ -106,7 +110,7 @@ export abstract class OAuthModule extends RestAPIModule
         }
         else if (grantType === 'authorization_code')
         {
-            queryParams.set('redirect_uri', `${process.env.EXTERNAL_DOMAIN}/${this.oauthOptions.redirectTo}`);
+            queryParams.set('redirect_uri', `https://${process.env.PUBLIC_DOMAIN_OR_IP}/${this.oauthOptions.redirectTo}`);
             queryParams.set('code', this.code);
         }
         return queryParams;
