@@ -1,7 +1,7 @@
 /.idea
 /node_modules
 /dist
-/data/*
+/data
 cert.pem
 chain.pem
 privkey.pem

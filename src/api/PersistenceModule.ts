@@ -1,7 +1,13 @@
-import {existsSync, NoParamCallback, readFile, readFileSync, writeFile, writeFileSync} from 'fs';
+import {existsSync, NoParamCallback, readFile, readFileSync, writeFile, writeFileSync, mkdirSync} from 'fs';
 
 class PersistenceModule
 {
+    constructor() {
+        if (!existsSync('data')) {
+            mkdirSync('data');
+        }
+    }
+
     public loadSync<T>(file: string, defaultValue?: T): any
     {
         file = this.saveJsonToDataFolder(file);
