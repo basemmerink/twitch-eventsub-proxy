@@ -156,7 +156,7 @@ class TwitchModule extends OAuthModule
             condition,
             transport: {
                 method: 'webhook',
-                callback: `${process.env.PUBLIC_DOMAIN_OR_IP}/eventsub`,
+                callback: `https://${process.env.PUBLIC_DOMAIN_OR_IP}/eventsub`,
                 secret: process.env.TWITCH_WEBHOOK_SECRET
             }
         })
