@@ -5,7 +5,8 @@ import {Server, WebSocket} from 'ws';
 
 import express from 'express';
 import crypto from 'crypto';
-import {createServer} from 'https';
+import {createServer} from 'http';
+import {createServer as createSSLServer} from 'https';
 import {twitchModule} from "./api/TwitchModule";
 import {TMIMessage, twitchChatModule} from "./api/TwitchChatModule";
 
@@ -31,13 +32,15 @@ if (!fs.existsSync(process.env.PRIVKEY_PEM_PATH) ||
 
 const app = express();
 
-const server = createServer({
-    key: fs.readFileSync(process.env.PRIVKEY_PEM_PATH),
-    ca: fs.readFileSync(process.env.CHAIN_PEM_PATH),
-    cert: fs.readFileSync(process.env.CERT_PEM_PATH)
-}, app);
+const server = process.env.USE_SSL == 'true' ?
+    createSSLServer({
+        key: fs.readFileSync(process.env.PRIVKEY_PEM_PATH),
+        ca: fs.readFileSync(process.env.CHAIN_PEM_PATH),
+        cert: fs.readFileSync(process.env.CERT_PEM_PATH)
+    }, app) :
+    createServer(app);
 
-server.listen(process.env.SSL_PORT, () => console.log(`Running https server on port ${process.env.SSL_PORT}`));
+server.listen(process.env.PORT, () => console.log(`Running http${process.env.USE_SSL == 'true' ? 's' : ''} server on port ${process.env.PORT}`));
 
 var wsServer = new Server({port: process.env.WEBSOCKET_LOCAL_PORT});
 wsServer.on('connection', ws => {
