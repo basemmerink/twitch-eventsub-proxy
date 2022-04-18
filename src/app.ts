@@ -69,7 +69,7 @@ twitchChatModule.onMessage().subscribe((message: TMIMessage) => {
     if (message.senderIsSelf) {
         return;
     }
-    forwardTwitchEvent('channel.chat', {user: message.userState['display-name'], message: message.message})
+    forwardTwitchEvent('channel.chat', {channel: message.channel, userState: message.userState, message: message.message});
 });
 
 app.use(express.json({
