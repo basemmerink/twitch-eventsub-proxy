@@ -40,6 +40,14 @@ const server = createServer({
 server.listen(process.env.SSL_PORT, () => console.log(`Running https server on port ${process.env.SSL_PORT}`));
 
 var wsServer = new Server({port: process.env.WEBSOCKET_LOCAL_PORT});
+wsServer.on('connection', ws => {
+    ws.on('message', data => {
+        const message = JSON.parse(data);
+        if (message.key == 'channel.chat') {
+            twitchChatModule.sendChat(message.payload);
+        }
+    });
+});
 
 twitchModule.subscribeTwitchEvent('channel.update', event => forwardTwitchEvent('channel.update', event));
 twitchModule.subscribeTwitchEvent('channel.follow', event => forwardTwitchEvent('channel.follow', event));
