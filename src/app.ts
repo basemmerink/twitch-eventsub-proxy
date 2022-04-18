@@ -21,10 +21,14 @@ const MESSAGE_TYPE_NOTIFICATION = 'notification';
 const MESSAGE_TYPE_REVOCATION = 'revocation';
 
 const HMAC_PREFIX = 'sha256=';
+const USE_SSL = process.env.USE_SSL == 'true';
 
-if (!fs.existsSync(process.env.PRIVKEY_PEM_PATH) ||
-    !fs.existsSync(process.env.CHAIN_PEM_PATH) ||
-    !fs.existsSync(process.env.CERT_PEM_PATH)) {
+if (USE_SSL &&
+    (
+        !fs.existsSync(process.env.PRIVKEY_PEM_PATH) ||
+        !fs.existsSync(process.env.CHAIN_PEM_PATH) ||
+        !fs.existsSync(process.env.CERT_PEM_PATH)
+    )) {
     console.log('Please install an SSL certificate first and point to the proper files in .env');
     process.exit(-1);
 }
@@ -32,7 +36,7 @@ if (!fs.existsSync(process.env.PRIVKEY_PEM_PATH) ||
 
 const app = express();
 
-const server = process.env.USE_SSL == 'true' ?
+const server = USE_SSL ?
     createSSLServer({
         key: fs.readFileSync(process.env.PRIVKEY_PEM_PATH),
         ca: fs.readFileSync(process.env.CHAIN_PEM_PATH),
@@ -40,7 +44,7 @@ const server = process.env.USE_SSL == 'true' ?
     }, app) :
     createServer(app);
 
-server.listen(process.env.PORT, () => console.log(`Running http${process.env.USE_SSL == 'true' ? 's' : ''} server on port ${process.env.PORT}`));
+server.listen(process.env.PORT, () => console.log(`Running http${USE_SSL ? 's' : ''} server on port ${process.env.PORT}`));
 
 var wsServer = new Server({port: process.env.WEBSOCKET_LOCAL_PORT});
 wsServer.on('connection', ws => {
